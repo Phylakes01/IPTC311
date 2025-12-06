@@ -1,213 +1,300 @@
-from datetime import datetime
-import Module_2 as cm
+import sys
+import os
+import re  # Regex for validation
 
-rooms = [
-    {"room_id": 101, "type": "room1", "price": 100,  "status": "Available"},
-    {"room_id": 102, "type": "room2", "price": 200,  "status": "Available"},
-    {"room_id": 103, "type": "room3", "price": 300,  "status": "Available"}
-]
+# Check if running on Windows to import msvcrt for Escape key
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None  # Fallback for Mac/Linux
 
-reservations = []
-waitlist = []
+# Import your external modules
+import Module_1 as rsvp   # Reservations
+import Module_2 as guest  # Guest Profiles
+import Module_3 as rooms  # Room Inventory
+import Module_4 as house  # Housekeeping
+import Module_5 as bill   # Billing
+import Module_6 as report # Analytics
 
+# ==========================================
+# INPUT HELPER FUNCTIONS
+# ==========================================
 
-def validate_date(date_string):
-    """Validates that a date string is in YYYY-MM-DD format."""
-    try:
-        datetime.strptime(date_string, '%Y-%m-%d')
-        return True
-    except ValueError:
-        return False
+def input_with_escape(prompt):
+    """
+    Custom input function that detects the ESCAPE key.
+    Returns the string input, or None if Escape is pressed.
+    """
+    if msvcrt is None:
+        return input(prompt)
 
+    print(prompt, end='', flush=True)
+    buffer = []
+    
+    while True:
+        char = msvcrt.getch()
 
-def check_room_availability(date):
-    print("\nRoom Available")
-    available_rooms = [room for room in rooms if room["status"] == "Available"]
+        if char == b'\x1b':  # ESCAPE key
+            print("\n🔙 [Cancelled]")
+            return None
+        
+        elif char == b'\r':  # ENTER key
+            print()
+            return "".join(buffer)
+        
+        elif char == b'\x08':  # BACKSPACE key
+            if buffer:
+                buffer.pop()
+                sys.stdout.write('\b \b') 
+                sys.stdout.flush()
+        
+        else:
+            try:
+                decoded_char = char.decode('utf-8')
+                buffer.append(decoded_char)
+                sys.stdout.write(decoded_char)
+                sys.stdout.flush()
+            except:
+                pass
 
-    if not available_rooms:
-        print("No rooms available on this date.")
-    else:
-        for room in available_rooms:
-            print(f"Room {room['room_id']} - {room['type']} - ₱{room['price']}")
+def get_valid_name(prompt):
+    """Validates: Only letters and spaces."""
+    while True:
+        val = input_with_escape(prompt)
+        if val is None: return None
+            
+        if not val.strip():
+            print("❌ Name cannot be empty.")
+            continue
 
+        if re.match(r"^[A-Za-z ]+$", val):
+            return val.strip()
+        else:
+            print("❌ Invalid format! Please use only letters and spaces.")
 
-def create_reservation(name, room_type, check_in):
-    print("\nCreate Reservation")
-    for room in rooms:
-        if room["type"].lower() == room_type.lower() and room["status"] == "Available":
-            room["status"] = "Reserved"
-            reservation = {
-                "guest": name,
-                "room_id": room["room_id"],
-                "check_in": check_in,
-                "status": "Confirmed"
-            }
-            reservations.append(reservation)
-            print(f"Reservation confirmed for {name} in Room {room['room_id']}")
-            return
+def get_valid_date_input(prompt):
+    """Validates: Only numbers and dashes (0-9, -)."""
+    while True:
+        val = input_with_escape(prompt)
+        if val is None: return None
+        
+        if not val.strip():
+            print("❌ Date cannot be empty.")
+            continue
 
-    print("No room available — adding to waitlist")
-    waitlist.append({"guest": name, "room_type": room_type, "check_in": check_in})
+        if re.match(r"^[0-9-]+$", val):
+             return val.strip()
+        else:
+             print("❌ Invalid characters! Please use only numbers and dashes (e.g., 2025-01-01).")
 
+def get_valid_int(prompt):
+    while True:
+        val = input_with_escape(prompt)
+        if val is None: return None
+        try:
+            return int(val)
+        except ValueError:
+            print("❌ Invalid input! Please enter a whole number.")
 
-def modify_reservation(guest_name, new_date):
-    print("\nModify Reservation")
-    for res in reservations:
-        if res["guest"].lower() == guest_name.lower():
-            res["check_in"] = new_date
-            print(f"Reservation updated for {guest_name}")
-            return
-    print("Reservation not found")
+def get_valid_float(prompt):
+    while True:
+        val = input_with_escape(prompt)
+        if val is None: return None
+        try:
+            return float(val)
+        except ValueError:
+            print("❌ Invalid input! Please enter a valid number (e.g., 100.50).")
 
-
-def cancel_reservation(guest_name):
-    print("\nCancel Reservation")
-    for res in reservations:
-        if res["guest"].lower() == guest_name.lower():
-            room_id = res["room_id"]
-            reservations.remove(res)
-
-            for room in rooms:
-                if room["room_id"] == room_id:
-                    room["status"] = "Available"
-                    break
-
-            print(f"Reservation cancelled for {guest_name}")
-            promote_waitlist()
-            return
-    print("Reservation not found")
-
-
-def promote_waitlist():
-    if waitlist:
-        guest = waitlist.pop(0)
-        create_reservation(guest["guest"], guest["room_type"], guest["check_in"])
-        print(f"Waitlisted guest promoted: {guest['guest']}")
-
-
-def view_calendar():
-    print("\n--- Calendar View ---")
-    if not reservations:
-        print("No reservations yet.")
-    for res in reservations:
-        print(f"{res['guest']} → Room {res['room_id']} on {res['check_in']}")
-
+# ==========================================
+# MAIN MENU
+# ==========================================
 
 def main():
     while True:
-        print("\n--- Hotel Management System ---")
-        print("1. Check Room Availability")
-        print("2. Create Reservation")
-        print("3. Modify Reservation")
-        print("4. Cancel Reservation")
-        print("5. View Calendar")
-        print("6. Manage Guest Profile")
-        print("7. Set Guest Preferences")
-        print("8. Manage Loyalty Programs")
-        print("9. View Stay History")
-        print("10. Add Guest Notes")
-        print("11. Store Guest ID")
-        print("12. Exit")
+        print("\n" + "="*40)
+        print("      🏨 HOTEL MANAGEMENT SYSTEM")
+        print("="*40)
+        
+        print("--- RESERVATIONS ---")
+        print("1.  Check Availability")
+        print("2.  Create Reservation")
+        print("3.  Modify Reservation")
+        print("4.  Cancel Reservation")
+        print("5.  View Calendar")  # <-- RESTORED
 
-        choice = input("Enter choice: ")
+        print("\n--- GUEST MANAGEMENT ---")
+        print("6.  Create Guest Profile")
+        print("7.  Set Preferences")     # <-- RESTORED
+        print("8.  Manage Loyalty")      # <-- RESTORED
+        print("9.  View Stay History")   # <-- RESTORED
+        print("10. Add Guest Notes")     # <-- RESTORED
+        print("11. Store Guest ID")      # <-- RESTORED
 
-        if choice == '1':
-            date = input("Enter date (YYYY-MM-DD): ")
-            if not validate_date(date):
-                print("Invalid date format. Please use YYYY-MM-DD.")
-                continue
-            check_room_availability(date)
-        elif choice == '2':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            room_type = input("Enter room type (room1, room2, room3): ")
-            if room_type not in [r['type'] for r in rooms]:
-                print("Invalid room type.")
-                continue
-            check_in = input("Enter check-in date (YYYY-MM-DD): ")
-            if not validate_date(check_in):
-                print("Invalid date format. Please use YYYY-MM-DD.")
-                continue
-            create_reservation(name, room_type, check_in)
-        elif choice == '3':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            new_date = input("Enter new check-in date (YYYY-MM-DD): ")
-            if not validate_date(new_date):
-                print("Invalid date format. Please use YYYY-MM-DD.")
-                continue
-            modify_reservation(name, new_date)
-        elif choice == '4':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            cancel_reservation(name)
-        elif choice == '5':
-            view_calendar()
-        elif choice == '6':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            contact_info = {'name': name}
-            id_info = input("Enter ID info: ")
-            travel_purpose = input("Enter travel purpose: ")
-            cm.manage_guest_profile(contact_info, id_info, travel_purpose)
-        elif choice == '7':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            room_pref = input("Enter room preference: ")
-            service_pref = input("Enter service preference: ")
-            cm.set_guest_preferences(name, room_pref, service_pref)
-        elif choice == '8':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            action = input("Enter action (add_points/set_level): ")
-            if action not in ["add_points", "set_level"]:
-                print("Invalid action.")
-                continue
-            points = 0
-            if action == "add_points":
-                try:
-                    points = int(input("Enter points to add: "))
-                except ValueError:
-                    print("Invalid input. Please enter a number.")
-                    continue
-            cm.manage_loyalty_programs(name, action, points)
-        elif choice == '9':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            cm.view_stay_history(name)
-        elif choice == '10':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            note = input("Enter note: ")
-            cm.add_guest_notes(name, note)
-        elif choice == '11':
-            name = input("Enter guest name: ")
-            if not name.strip():
-                print("Guest name cannot be empty.")
-                continue
-            id_doc = input("Enter ID document details: ")
-            cm.store_guest_id(name, id_doc)
-        elif choice == '12':
+        print("\n--- ROOMS & HOUSEKEEPING ---")
+        print("12. View Room Status")
+        print("13. Log Damage & Auto-Charge")
+        print("14. Schedule Cleaning")
+        print("15. View Housekeeping Tasks")
+
+        print("\n--- BILLING & REPORTS ---")
+        print("16. View Invoice")
+        print("17. Record Payment")
+        print("18. View Occupancy Report")
+        print("19. View Financial Report")
+        print("20. 📥 Export Occupancy (CSV)")
+        print("21. 📥 Export Financial (CSV)")
+        print("22. Exit")
+
+        choice = input_with_escape("\nEnter choice (1-22): ")
+
+        if choice is None:
             print("Exiting...")
             break
-        else:
-            print("Invalid choice, please try again.")
+
+        try:
+            # --- RESERVATION MODULE ---
+            if choice == '1':
+                date = get_valid_date_input("Enter date (YYYY-MM-DD): ")
+                if date: rsvp.check_room_availability(date)
+            
+            elif choice == '2':
+                name = get_valid_name("Enter guest name: ")
+                if name is None: continue 
+                rtype = input_with_escape("Enter room type (room1/room2/room3): ")
+                if rtype is None: continue
+                date = get_valid_date_input("Enter date (YYYY-MM-DD): ")
+                if date is None: continue
+                rsvp.create_reservation(name, rtype, date)
+
+            elif choice == '3':
+                name = get_valid_name("Enter guest name: ")
+                if name is None: continue
+                new_date = get_valid_date_input("Enter new date (YYYY-MM-DD): ")
+                if new_date is None: continue
+                rsvp.modify_reservation(name, new_date)
+
+            elif choice == '4':
+                name = get_valid_name("Enter guest name: ")
+                if name is None: continue
+                rsvp.cancel_reservation(name)
+
+            elif choice == '5':
+                rsvp.view_calendar()
+
+            # --- GUEST MODULE (Restored Features) ---
+            elif choice == '6':
+                name = get_valid_name("Enter guest name: ")
+                if name is None: continue
+                info = input_with_escape("Enter ID info: ")
+                if info is None: continue
+                purpose = input_with_escape("Enter travel purpose: ")
+                if purpose is None: continue
+                guest.manage_guest_profile({'name': name}, info, purpose)
+
+            elif choice == '7':
+                name = get_valid_name("Enter guest name: ")
+                if name is None: continue
+                room_pref = input_with_escape("Enter room preference: ")
+                if room_pref is None: continue
+                svc_pref = input_with_escape("Enter service preference: ")
+                if svc_pref is None: continue
+                guest.set_guest_preferences(name, room_pref, svc_pref)
+
+            elif choice == '8':
+                name = get_valid_name("Enter guest name: ")
+                if name is None: continue
+                action = input_with_escape("Action (add_points/set_level): ")
+                if action is None: continue
+                
+                points = 0
+                if action == "add_points":
+                    p_input = get_valid_int("Enter points to add: ")
+                    if p_input is None: continue
+                    points = p_input
+                
+                guest.manage_loyalty_programs(name, action, points)
+
+            elif choice == '9':
+                name = get_valid_name("Enter guest name: ")
+                if name: guest.view_stay_history(name)
+
+            elif choice == '10':
+                name = get_valid_name("Enter guest name: ")
+                if name is None: continue
+                note = input_with_escape("Enter note: ")
+                if note: guest.add_guest_notes(name, note)
+
+            elif choice == '11':
+                name = get_valid_name("Enter guest name: ")
+                if name is None: continue
+                doc = input_with_escape("Enter ID Document details: ")
+                if doc: guest.store_guest_id(name, doc)
+
+            # --- ROOMS & HOUSEKEEPING ---
+            elif choice == '12':
+                all_rooms = rooms.get_all_rooms()
+                for r in all_rooms:
+                     print(f"Room {r['room_id']}: {r['status']}")
+
+            elif choice == '13':
+                print("\n--- Log Damage & Charge Guest ---")
+                rid = get_valid_int("Enter Room ID: ")
+                if rid is None: continue
+                item = input_with_escape("Damaged item description: ")
+                if item is None: continue
+                cost = get_valid_float("Repair cost: ")
+                if cost is None: continue
+
+                rooms.log_damage(rid, item, cost)
+                invoice = bill.get_active_invoice_by_room(rid)
+                if invoice:
+                    bill.add_charge(invoice["invoice_id"], f"DAMAGE: {item}", cost)
+                else:
+                    print("⚠️ WARNING: No active invoice found. Charge recorded in logs but not billed.")
+
+            elif choice == '14':
+                rid = get_valid_int("Enter Room ID to clean: ")
+                if rid: house.schedule_cleaning(rid)
+
+            elif choice == '15':
+                house.view_housekeeping_status()
+
+            # --- BILLING & REPORTS ---
+            elif choice == '16':
+                name = get_valid_name("Enter guest name: ")
+                if name: bill.show_invoice(name)
+
+            elif choice == '17':
+                iid = get_valid_int("Enter Invoice ID: ")
+                if iid is None: continue
+                amt = get_valid_float("Amount to pay: ")
+                if amt is None: continue
+                method = input_with_escape("Method (Cash/Card): ")
+                if method is None: continue
+                bill.record_payment(iid, amt, method)
+
+            elif choice == '18':
+                report.generate_occupancy_report()
+
+            elif choice == '19':
+                report.generate_financial_report()
+
+            elif choice == '20':
+                report.export_occupancy_to_csv()
+            
+            elif choice == '21':
+                report.export_financial_to_csv()
+
+            elif choice == '22':
+                print("Exiting...")
+                break
+            
+            else:
+                print("❌ Invalid selection.")
+
+        except Exception as e:
+            print(f"\n❌ A system error occurred: {e}")
+            print("Recovering... Please try again.\n")
 
 if __name__ == "__main__":
     main()
